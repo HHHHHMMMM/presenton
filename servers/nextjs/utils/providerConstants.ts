@@ -25,6 +25,12 @@ export interface LLMProviderOption {
 }
 
 export const IMAGE_PROVIDERS: Record<string, ImageProviderOption> = {
+  none: {
+    value: "none",
+    label: "None (Use Placeholders)",
+    description: "No image generation - use placeholder images",
+    requiresApiKey: false,
+  },
   pexels: {
     value: "pexels",
     label: "Pexels",

@@ -103,13 +103,8 @@ export default function LLMProviderSelection({
   useEffect(() => {
     let updates: any = {};
     if (!llmConfig.IMAGE_PROVIDER) {
-      if (llmConfig.LLM === "openai") {
-        updates.IMAGE_PROVIDER = "dall-e-3";
-      } else if (llmConfig.LLM === "google") {
-        updates.IMAGE_PROVIDER = "gemini_flash";
-      } else {
-        updates.IMAGE_PROVIDER = "pexels";
-      }
+      // Default to "none" instead of forcing a specific provider
+      updates.IMAGE_PROVIDER = "none";
     }
     if (!llmConfig.OLLAMA_URL) {
       updates.OLLAMA_URL = "http://localhost:11434";

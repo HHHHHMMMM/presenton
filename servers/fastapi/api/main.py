@@ -14,7 +14,8 @@ app = FastAPI(lifespan=app_lifespan)
 app.include_router(API_V1_PPT_ROUTER)
 app.include_router(API_V1_WEBHOOK_ROUTER)
 app.include_router(API_V1_MOCK_ROUTER)
-
+for route in app.routes:
+    print(f"{route.methods if hasattr(route, 'methods') else 'N/A'} {route.path}")
 # Middlewares
 origins = ["*"]
 app.add_middleware(

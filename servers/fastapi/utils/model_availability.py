@@ -106,8 +106,12 @@ async def check_llm_and_image_provider_api_or_model_availability():
 
         # Check for Image Provider and API keys
         selected_image_provider = get_selected_image_provider()
-        if not selected_image_provider:
-            raise Exception("IMAGE_PROVIDER must be provided")
+        # IMAGE_PROVIDER is now optional - if not provided or set to "none", no validation needed
+        if not selected_image_provider or selected_image_provider == ImageProvider.NONE:
+            print("-" * 50)
+            print("No image provider configured. Images will use placeholders.")
+            print("-" * 50)
+            return
 
         if selected_image_provider == ImageProvider.PEXELS:
             pexels_api_key = get_pexels_api_key_env()

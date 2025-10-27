@@ -7,6 +7,10 @@ const nextConfig = {
   // Rewrites for development - proxy font requests to FastAPI backend
   async rewrites() {
     return [
+        {
+  source: '/api/v1/:path*',
+  destination: 'http://localhost:8000/api/v1/:path*',
+},
       {
         source: '/app_data/fonts/:path*',
         destination: 'http://localhost:8000/app_data/fonts/:path*',

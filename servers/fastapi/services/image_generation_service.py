@@ -14,6 +14,7 @@ from utils.image_provider import (
     is_pixabay_selected,
     is_gemini_flash_selected,
     is_dalle3_selected,
+    is_none_selected,
 )
 import uuid
 
@@ -25,7 +26,9 @@ class ImageGenerationService:
         self.image_gen_func = self.get_image_gen_func()
 
     def get_image_gen_func(self):
-        if is_pixabay_selected():
+        if is_none_selected():
+            return None
+        elif is_pixabay_selected():
             return self.get_image_from_pixabay
         elif is_pixels_selected():
             return self.get_image_from_pexels

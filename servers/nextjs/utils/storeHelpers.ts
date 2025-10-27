@@ -16,7 +16,7 @@ export const handleSaveLLMConfig = async (llmConfig: LLMConfig) => {
 
 export const hasValidLLMConfig = (llmConfig: LLMConfig) => {
   if (!llmConfig.LLM) return false;
-  if (!llmConfig.IMAGE_PROVIDER) return false;
+  //if (!llmConfig.IMAGE_PROVIDER) return false;
 
   const isOpenAIConfigValid =
     llmConfig.OPENAI_MODEL !== "" &&
@@ -69,7 +69,7 @@ export const hasValidLLMConfig = (llmConfig: LLMConfig) => {
       case "gemini_flash":
         return llmConfig.GOOGLE_API_KEY && llmConfig.GOOGLE_API_KEY !== "";
       default:
-        return false;
+        return true;
     }
   };
 

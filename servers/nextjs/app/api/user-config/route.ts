@@ -4,6 +4,9 @@ import { LLMConfig } from "@/types/llm_config";
 
 const userConfigPath = process.env.USER_CONFIG_PATH!;
 const canChangeKeys = process.env.CAN_CHANGE_KEYS !== "false";
+
+console.log("userConfigPath:", process.env.USER_CONFIG_PATH);
+console.log("userConfigPath (code variable):", userConfigPath);
 console.log("UserConfigPath:", userConfigPath);
 export async function GET() {
   if (!canChangeKeys) {
@@ -69,3 +72,4 @@ export async function POST(request: Request) {
   fs.writeFileSync(userConfigPath, JSON.stringify(mergedConfig));
   return NextResponse.json(mergedConfig);
 }
+
