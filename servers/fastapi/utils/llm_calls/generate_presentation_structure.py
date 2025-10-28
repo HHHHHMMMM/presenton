@@ -15,6 +15,7 @@ def get_messages(
     data: str,
     instructions: Optional[str] = None,
 ):
+
     return [
         LLMSystemMessage(
             content=f"""
@@ -96,11 +97,13 @@ def get_messages_for_slides_markdown(
 
 
 async def generate_presentation_structure(
-    presentation_outline: PresentationOutlineModel,
-    presentation_layout: PresentationLayoutModel,
-    instructions: Optional[str] = None,
-    using_slides_markdown: bool = False,
+        presentation_outline: PresentationOutlineModel,
+        presentation_layout: PresentationLayoutModel,
+        instructions: Optional[str] = None,
+        using_slides_markdown: bool = False,
 ) -> PresentationStructureModel:
+    print(f"\n[generate_presentation_structure] === START ===", flush=True)
+    print(f"[generate_presentation_structure] n_slides={len(presentation_outline.slides)}", flush=True)
 
     client = LLMClient()
     model = get_model()
@@ -109,6 +112,8 @@ async def generate_presentation_structure(
     )
 
     try:
+        print(f"[generate_presentation_structure] Calling generate_structured...", flush=True)
+
         response = await client.generate_structured(
             model=model,
             messages=(
@@ -129,6 +134,24 @@ async def generate_presentation_structure(
             response_format=response_model.model_json_schema(),
             strict=True,
         )
-        return PresentationStructureModel(**response)
+
+        print(f"[generate_presentation_structure] ✅ generate_structured returned", flush=True)
+        print(f"[generate_presentation_structure] Response type: {type(response)}", flush=True)
+
+        if response is None:
+            print(f"[generate_presentation_structure] ❌ Response is None!", flush=True)
+            raise ValueError("LLM returned None")
+
+        print(f"[generate_presentation_structure] Creating PresentationStructureModel...", flush=True)
+        result = PresentationStructureModel(**response)
+
+        print(f"[generate_presentation_structure] ✅ Success!", flush=True)
+        print(f"[generate_presentation_structure] === END ===\n", flush=True)
+
+        return result
+
     except Exception as e:
+        print(f"[generate_presentation_structure] ❌ Exception: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         raise handle_llm_client_exceptions(e)

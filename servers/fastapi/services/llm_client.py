@@ -446,16 +446,19 @@ class LLMClient:
 
     # ? Generate Structured Content
     async def _generate_openai_structured(
-        self,
-        model: str,
-        messages: List[LLMMessage],
-        response_format: dict,
-        strict: bool = False,
-        max_tokens: Optional[int] = None,
-        tools: Optional[List[dict]] = None,
-        extra_body: Optional[dict] = None,
-        depth: int = 0,
+            self,
+            model: str,
+            messages: List[LLMMessage],
+            response_format: dict,
+            strict: bool = False,
+            max_tokens: Optional[int] = None,
+            tools: Optional[List[dict]] = None,
+            extra_body: Optional[dict] = None,
+            depth: int = 0,
     ) -> dict | None:
+        print(f"\n[DEBUG] use_tool_calls_for_structured_output: {self.use_tool_calls_for_structured_output()}",
+              flush=True)
+
         client: AsyncOpenAI = self._client
         response_schema = response_format
         all_tools = [*tools] if tools else None
@@ -463,12 +466,14 @@ class LLMClient:
         use_tool_calls_for_structured_output = (
             self.use_tool_calls_for_structured_output()
         )
+
         if strict and depth == 0:
             response_schema = ensure_strict_json_schema(
                 response_schema,
                 path=(),
                 root=response_schema,
             )
+
         if use_tool_calls_for_structured_output and depth == 0:
             if all_tools is None:
                 all_tools = []
@@ -484,30 +489,45 @@ class LLMClient:
                 )
             )
 
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[message.model_dump() for message in messages],
-            response_format=(
-                {
-                    "type": "json_schema",
-                    "json_schema": (
-                        {
-                            "name": "ResponseSchema",
-                            "strict": strict,
-                            "schema": response_schema,
-                        }
-                    ),
-                }
-                if not use_tool_calls_for_structured_output
-                else None
-            ),
-            max_completion_tokens=max_tokens,
-            tools=all_tools,
-            extra_body=extra_body,
+        response_format_param = (
+            {
+                "type": "json_schema",
+                "json_schema": (
+                    {
+                        "name": "ResponseSchema",
+                        "strict": strict,
+                        "schema": response_schema,
+                    }
+                ),
+            }
+            if not use_tool_calls_for_structured_output
+            else None
         )
 
-        content = response.choices[0].message.content
+        print(f"[DEBUG] response_format: {response_format_param is not None}", flush=True)
+        print(f"[DEBUG] tools: {all_tools is not None}", flush=True)
+        print(f"[DEBUG] Calling API...", flush=True)
 
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[message.model_dump() for message in messages],
+                response_format=response_format_param,
+                max_completion_tokens=max_tokens,
+                tools=all_tools,
+                extra_body=extra_body,
+            )
+
+            print(f"[DEBUG] ✅ API responded", flush=True)
+            print(f"[DEBUG] finish_reason: {response.choices[0].finish_reason}", flush=True)
+            print(f"[DEBUG] has content: {response.choices[0].message.content is not None}", flush=True)
+            print(f"[DEBUG] has tool_calls: {response.choices[0].message.tool_calls is not None}", flush=True)
+
+        except Exception as e:
+            print(f"[DEBUG] ❌ API error: {e}", flush=True)
+            raise
+
+        content = response.choices[0].message.content
         tool_calls = response.choices[0].message.tool_calls
         has_response_schema = False
 
@@ -553,6 +573,9 @@ class LLMClient:
                     extra_body=extra_body,
                     depth=depth + 1,
                 )
+
+        print(f"[DEBUG] Final content length: {len(content) if content else 0}", flush=True)
+
         if content:
             if depth == 0:
                 return dict(dirtyjson.loads(content))
@@ -1129,18 +1152,23 @@ class LLMClient:
                 )
 
     # ? Stream Structured Content
+    # 替换你的 _stream_openai_structured 方法
     async def _stream_openai_structured(
-        self,
-        model: str,
-        messages: List[LLMMessage],
-        response_format: dict,
-        strict: bool = False,
-        max_tokens: Optional[int] = None,
-        tools: Optional[List[dict]] = None,
-        extra_body: Optional[dict] = None,
-        depth: int = 0,
-    ) -> AsyncGenerator[str, None]:
-        client: AsyncOpenAI = self._client
+            self,
+            model: str,
+            messages,
+            response_format: dict,
+            strict: bool = False,
+            max_tokens=None,
+            tools=None,
+            extra_body=None,
+            depth: int = 0,
+    ):
+        print(f"\n{'=' * 60}")
+        print(f"[_stream_openai_structured] START - depth={depth}")
+        print(f"{'=' * 60}\n", flush=True)
+
+        client = self._client
 
         response_schema = response_format
         all_tools = [*tools] if tools else None
@@ -1148,14 +1176,21 @@ class LLMClient:
         use_tool_calls_for_structured_output = (
             self.use_tool_calls_for_structured_output()
         )
+
+        print(f"[CONFIG] use_tool_calls={use_tool_calls_for_structured_output}", flush=True)
+
         if strict and depth == 0:
+            from utils.schema_utils import ensure_strict_json_schema
             response_schema = ensure_strict_json_schema(
                 response_schema,
                 path=(),
                 root=response_schema,
             )
+            print(f"[CONFIG] Schema strictified", flush=True)
 
         if use_tool_calls_for_structured_output and depth == 0:
+            from models.llm_tools import LLMDynamicTool
+            from utils.dummy_functions import do_nothing_async
             if all_tools is None:
                 all_tools = []
             all_tools.append(
@@ -1169,15 +1204,23 @@ class LLMClient:
                     strict=strict,
                 )
             )
+            print(f"[CONFIG] ResponseSchema tool added, total_tools={len(all_tools)}", flush=True)
 
-        tool_calls: List[LLMToolCall] = []
+        tool_calls = []
         current_index = 0
         current_id = None
         current_name = None
         current_arguments = None
 
         has_response_schema_tool_call = False
-        async for event in await client.chat.completions.create(
+        last_finish_reason = None
+
+        print(f"[API] Calling client.chat.completions.create...", flush=True)
+
+        from openai.types.chat.chat_completion_chunk import ChatCompletionChunk as OpenAIChatCompletionChunk
+        from models.llm_tool_call import OpenAIToolCall, OpenAIToolCallFunction
+
+        stream = await client.chat.completions.create(
             model=model,
             messages=[message.model_dump() for message in messages],
             max_completion_tokens=max_tokens,
@@ -1198,51 +1241,103 @@ class LLMClient:
             ),
             extra_body=extra_body,
             stream=True,
-        ):
-            event: OpenAIChatCompletionChunk = event
-            if not event.choices:
-                continue
+        )
 
-            content_chunk = event.choices[0].delta.content
-            if content_chunk and not use_tool_calls_for_structured_output:
-                yield content_chunk
+        print(f"[API] Stream created: {type(stream)}", flush=True)
+        print(f"[LOOP] Starting iteration...\n", flush=True)
 
-            tool_call_chunk = event.choices[0].delta.tool_calls
-            if tool_call_chunk:
-                tool_index = tool_call_chunk[0].index
-                tool_id = tool_call_chunk[0].id
-                tool_name = tool_call_chunk[0].function.name
-                tool_arguments = tool_call_chunk[0].function.arguments
+        event_count = 0
+        loop_ended_normally = False
 
-                if current_index != tool_index:
-                    tool_calls.append(
-                        OpenAIToolCall(
-                            id=current_id,
-                            type="function",
-                            function=OpenAIToolCallFunction(
-                                name=current_name,
-                                arguments=current_arguments,
-                            ),
-                        )
-                    )
-                    current_index = tool_index
-                    current_id = tool_id
-                    current_name = tool_name
-                    current_arguments = tool_arguments
-                else:
-                    current_name = tool_name or current_name
-                    current_id = tool_id or current_id
-                    if current_arguments is None:
+        try:
+            async for event in stream:
+                event_count += 1
+                print(f"[EVENT {event_count}] Received - choices={len(event.choices) if event.choices else 0}",
+                      flush=True)
+
+                if not event.choices:
+                    print(f"  └─ No choices, continue", flush=True)
+                    continue
+
+                choice = event.choices[0]
+                content_chunk = choice.delta.content
+
+                # ⚠️ 关键：检查 finish_reason
+                if hasattr(choice, 'finish_reason') and choice.finish_reason:
+                    last_finish_reason = choice.finish_reason
+                    print(f"  ├─ ⚠️ FINISH_REASON: {choice.finish_reason}", flush=True)
+
+                if content_chunk:
+                    print(f"  ├─ Content: {repr(content_chunk[:50])}", flush=True)
+
+                if content_chunk and not use_tool_calls_for_structured_output:
+                    print(f"  ├─ YIELDING content chunk", flush=True)
+                    yield content_chunk
+                    print(f"  └─ Yielded successfully", flush=True)
+
+                tool_call_chunk = choice.delta.tool_calls
+                if tool_call_chunk:
+                    tool_index = tool_call_chunk[0].index
+                    tool_id = tool_call_chunk[0].id
+                    tool_name = tool_call_chunk[0].function.name
+                    tool_arguments = tool_call_chunk[0].function.arguments
+
+                    print(
+                        f"  ├─ Tool call: idx={tool_index}, id={tool_id}, name={tool_name}, args_len={len(tool_arguments) if tool_arguments else 0}",
+                        flush=True)
+
+                    if current_index != tool_index:
+                        print(f"  ├─ New tool index {current_index} -> {tool_index}, saving previous", flush=True)
+                        if current_id is not None:  # ⚠️ 只有当有之前的 tool call 时才添加
+                            tool_calls.append(
+                                OpenAIToolCall(
+                                    id=current_id,
+                                    type="function",
+                                    function=OpenAIToolCallFunction(
+                                        name=current_name,
+                                        arguments=current_arguments,
+                                    ),
+                                )
+                            )
+                        current_index = tool_index
+                        current_id = tool_id
+                        current_name = tool_name
                         current_arguments = tool_arguments
-                    elif tool_arguments:
-                        current_arguments += tool_arguments
+                    else:
+                        current_name = tool_name or current_name
+                        current_id = tool_id or current_id
+                        if current_arguments is None:
+                            current_arguments = tool_arguments
+                        elif tool_arguments:
+                            current_arguments += tool_arguments
 
-                if current_name == "ResponseSchema":
-                    if tool_arguments:
-                        yield tool_arguments
-                    has_response_schema_tool_call = True
+                    if current_name == "ResponseSchema":
+                        if tool_arguments:
+                            print(f"  ├─ YIELDING ResponseSchema args: {repr(tool_arguments[:50])}", flush=True)
+                            yield tool_arguments
+                            print(f"  └─ Yielded successfully", flush=True)
+                        has_response_schema_tool_call = True
+
+            loop_ended_normally = True
+            print(f"\n[LOOP] ✅ Ended normally", flush=True)
+
+        except GeneratorExit:
+            print(f"\n[LOOP] ⚠️ GeneratorExit caught - generator was closed externally", flush=True)
+            raise
+        except Exception as e:
+            print(f"\n[LOOP] ❌ Exception: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            raise
+
+        print(
+            f"[LOOP] Completed - events={event_count}, normal={loop_ended_normally}, last_finish={last_finish_reason}",
+            flush=True)
 
         if current_id is not None:
+            print(
+                f"[FINAL] Adding final tool call: id={current_id}, name={current_name}, args_len={len(current_arguments) if current_arguments else 0}",
+                flush=True)
             tool_calls.append(
                 OpenAIToolCall(
                     id=current_id,
@@ -1254,7 +1349,14 @@ class LLMClient:
                 )
             )
 
+        print(f"[SUMMARY] tool_calls={len(tool_calls)}, has_response_schema={has_response_schema_tool_call}",
+              flush=True)
+        print(f"[SUMMARY] Total arguments accumulated: {len(current_arguments) if current_arguments else 0} chars",
+              flush=True)
+
         if tool_calls and not has_response_schema_tool_call:
+            print(f"[RECURSION] Handling tool calls and recursing...", flush=True)
+            from models.llm_message import OpenAIAssistantMessage
             tool_call_messages = await self.tool_calls_handler.handle_tool_calls_openai(
                 tool_calls
             )
@@ -1268,16 +1370,22 @@ class LLMClient:
                 *tool_call_messages,
             ]
             async for event in self._stream_openai_structured(
-                model=model,
-                messages=new_messages,
-                max_tokens=max_tokens,
-                strict=strict,
-                tools=all_tools,
-                response_format=response_schema,
-                extra_body=extra_body,
-                depth=depth + 1,
+                    model=model,
+                    messages=new_messages,
+                    max_tokens=max_tokens,
+                    strict=strict,
+                    tools=all_tools,
+                    response_format=response_schema,
+                    extra_body=extra_body,
+                    depth=depth + 1,
             ):
                 yield event
+        else:
+            print(f"[NO RECURSION] Ending stream", flush=True)
+
+        print(f"\n{'=' * 60}")
+        print(f"[_stream_openai_structured] END - depth={depth}")
+        print(f"{'=' * 60}\n", flush=True)
 
     async def _stream_google_structured(
         self,

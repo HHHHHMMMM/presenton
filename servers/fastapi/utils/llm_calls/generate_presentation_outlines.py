@@ -10,10 +10,10 @@ from utils.llm_provider import get_model
 
 
 def get_system_prompt(
-    tone: Optional[str] = None,
-    verbosity: Optional[str] = None,
-    instructions: Optional[str] = None,
-    include_title_slide: bool = True,
+        tone: Optional[str] = None,
+        verbosity: Optional[str] = None,
+        instructions: Optional[str] = None,
+        include_title_slide: bool = True,
 ):
     return f"""
         You are an expert presentation creator. Generate structured presentations based on user requirements and format them according to the specified JSON schema with markdown content.
@@ -45,10 +45,10 @@ def get_system_prompt(
 
 
 def get_user_prompt(
-    content: str,
-    n_slides: int,
-    language: str,
-    additional_context: Optional[str] = None,
+        content: str,
+        n_slides: int,
+        language: str,
+        additional_context: Optional[str] = None,
 ):
     return f"""
         **Input:**
@@ -61,14 +61,14 @@ def get_user_prompt(
 
 
 def get_messages(
-    content: str,
-    n_slides: int,
-    language: str,
-    additional_context: Optional[str] = None,
-    tone: Optional[str] = None,
-    verbosity: Optional[str] = None,
-    instructions: Optional[str] = None,
-    include_title_slide: bool = True,
+        content: str,
+        n_slides: int,
+        language: str,
+        additional_context: Optional[str] = None,
+        tone: Optional[str] = None,
+        verbosity: Optional[str] = None,
+        instructions: Optional[str] = None,
+        include_title_slide: bool = True,
 ):
     return [
         LLMSystemMessage(
@@ -83,42 +83,84 @@ def get_messages(
 
 
 async def generate_ppt_outline(
-    content: str,
-    n_slides: int,
-    language: Optional[str] = None,
-    additional_context: Optional[str] = None,
-    tone: Optional[str] = None,
-    verbosity: Optional[str] = None,
-    instructions: Optional[str] = None,
-    include_title_slide: bool = True,
-    web_search: bool = False,
+        content: str,
+        n_slides: int,
+        language: Optional[str] = None,
+        additional_context: Optional[str] = None,
+        tone: Optional[str] = None,
+        verbosity: Optional[str] = None,
+        instructions: Optional[str] = None,
+        include_title_slide: bool = True,
+        web_search: bool = False,
 ):
+    print(f"\n[generate_ppt_outline] === START ===", flush=True)
+
     model = get_model()
     response_model = get_presentation_outline_model_with_n_slides(n_slides)
-
     client = LLMClient()
 
+    messages = get_messages(
+        content,
+        n_slides,
+        language,
+        additional_context,
+        tone,
+        verbosity,
+        instructions,
+        include_title_slide,
+    )
+
+    tools_enabled = client.enable_web_grounding() and web_search
+    print(f"[generate_ppt_outline] Calling client.stream_structured", flush=True)
+
     try:
-        async for chunk in client.stream_structured(
+        stream_generator = client.stream_structured(
             model,
-            get_messages(
-                content,
-                n_slides,
-                language,
-                additional_context,
-                tone,
-                verbosity,
-                instructions,
-                include_title_slide,
-            ),
+            messages,
             response_model.model_json_schema(),
             strict=True,
             tools=(
                 [SearchWebTool]
-                if (client.enable_web_grounding() and web_search)
+                if tools_enabled
                 else None
             ),
-        ):
-            yield chunk
+        )
+
+        print(f"[generate_ppt_outline] Starting iteration", flush=True)
+
+        stream_count = 0
+        loop_ended_normally = False
+
+        try:
+            async for chunk in stream_generator:
+                stream_count += 1
+                print(f"[generate_ppt_outline] [STREAM {stream_count}] Got chunk, size={len(chunk) if chunk else 0}",
+                      flush=True)
+
+                print(f"[generate_ppt_outline] [STREAM {stream_count}] Before yield", flush=True)
+                yield chunk
+                print(f"[generate_ppt_outline] [STREAM {stream_count}] After yield", flush=True)
+
+            loop_ended_normally = True
+            print(f"[generate_ppt_outline] ✅ Loop ended normally after {stream_count} streams", flush=True)
+
+        except GeneratorExit:
+            print(f"[generate_ppt_outline] ⚠️ GeneratorExit after {stream_count} streams", flush=True)
+            raise
+        except Exception as e:
+            print(f"[generate_ppt_outline] ❌ Exception after {stream_count} streams: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            raise
+        finally:
+            print(
+                f"[generate_ppt_outline] Finally block - stream_count={stream_count}, ended_normally={loop_ended_normally}",
+                flush=True)
+
     except Exception as e:
+        print(f"[generate_ppt_outline] ❌ Outer exception: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         yield handle_llm_client_exceptions(e)
+    finally:
+        print(f"[generate_ppt_outline] === END ===\n", flush=True)
