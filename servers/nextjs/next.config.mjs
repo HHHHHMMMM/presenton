@@ -8,9 +8,13 @@ const nextConfig = {
   async rewrites() {
     return [
         {
-  source: '/api/v1/:path*',
-  destination: 'http://localhost:8000/api/v1/:path*',
-},
+      source: '/api/v1/:path*',
+      destination: 'http://localhost:8000/api/v1/:path*',
+    },
+        {
+        source: '/static/:path*',
+        destination: 'http://localhost:8000/static/:path*',
+      },
       {
         source: '/app_data/fonts/:path*',
         destination: 'http://localhost:8000/app_data/fonts/:path*',
@@ -58,7 +62,7 @@ const nextConfig = {
       },
     ],
   },
-  
+
 };
 
 export default nextConfig;

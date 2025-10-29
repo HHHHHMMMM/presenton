@@ -22,7 +22,7 @@ async def export_presentation(
         # Get the converted PPTX model from the Next.js service
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                f"http://localhost/api/presentation_to_pptx_model?id={presentation_id}"
+                f"http://localhost:3000/api/presentation_to_pptx_model?id={presentation_id}"
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
@@ -53,7 +53,7 @@ async def export_presentation(
     else:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                "http://localhost/api/export-as-pdf",
+                "http://localhost:3000/api/export-as-pdf",
                 json={
                     "id": str(presentation_id),
                     "title": sanitize_filename(title or str(uuid.uuid4())),

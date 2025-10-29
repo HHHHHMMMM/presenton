@@ -8,7 +8,7 @@ LAYOUTS_ROUTER = APIRouter(prefix="/layouts", tags=["Layouts"])
 
 @LAYOUTS_ROUTER.get("/", summary="Get available layouts")
 async def get_layouts():
-    url = "http://localhost:3000/api/layouts"  # Adjust port if needed
+    url = "http:///api/layouts"  # Adjust port if needed
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status != 200:
